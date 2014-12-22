@@ -27,7 +27,8 @@ proguard-project.txt
 # Log Files
 *.log
 
-# Eclipse Files
+# Eclipse/android studio Files
+.idea
 .project
 .classpath
 *.pydevproject
@@ -42,6 +43,7 @@ tmp/
 local.properties
 .settings/
 .loadpath
+.iml
 
 # External tool builders
 .externalToolBuilders/

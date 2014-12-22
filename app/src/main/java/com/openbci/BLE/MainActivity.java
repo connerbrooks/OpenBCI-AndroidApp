@@ -17,6 +17,17 @@ import android.app.AlertDialog.Builder;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.LeScanCallback;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
+
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanRecord;
+import android.bluetooth.le.ScanResult;
+import android.bluetooth.le.ScanSettings;
+
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -27,6 +38,7 @@ import android.content.ServiceConnection;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
@@ -35,7 +47,7 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-public class MainActivity extends Activity implements LeScanCallback {
+public class MainActivity extends Activity {
 
 	private final String TAG = MainActivity.class.getSimpleName();
 	
@@ -74,6 +86,10 @@ public class MainActivity extends Activity implements LeScanCallback {
 	private ProgressBar mProgressBar;
 	private TextView mReceiving;
 	private Button mViewFileButton;
+    private Handler mHandler;
+
+    // Stops scanning after 10 seconds.
+    private static final long SCAN_PERIOD = 10000;
 
 	private Intent openTextFileIntent = new Intent(Intent.ACTION_VIEW);
 	private File directory = new File(
@@ -154,7 +170,17 @@ public class MainActivity extends Activity implements LeScanCallback {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 
-		mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        final BluetoothManager bluetoothManager =
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+		mBluetoothAdapter = bluetoothManager.getAdapter();
+
+        /*
+        if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+        }
+        */
+
 
 		// Bluetooth Button
 		mEnableBluetoothButton = (Button) findViewById(R.id.enableBluetooth);
@@ -221,11 +247,13 @@ public class MainActivity extends Activity implements LeScanCallback {
 
 		mScanButton = (Button) findViewById(R.id.scan);
 		mScanButton.setOnClickListener(new View.OnClickListener() {
+
 			@Override
 			public void onClick(View v) {
-				mBluetoothAdapter.startLeScan(
-						new UUID[] { RFduinoService.UUID_SERVICE },
-						MainActivity.this);
+                BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
+
+				scanner.startScan(
+                        mCallback);
 			}
 		});
 
@@ -320,7 +348,7 @@ public class MainActivity extends Activity implements LeScanCallback {
 	protected void onStop() {
 		super.onStop();
 
-		mBluetoothAdapter.stopLeScan(this);
+		//mBluetoothAdapter.stopLeScan(mLeScanCallback);
 
 		unregisterReceiver(scanModeReceiver);
 		unregisterReceiver(bluetoothStateReceiver);
@@ -356,6 +384,9 @@ public class MainActivity extends Activity implements LeScanCallback {
 		mEnableBluetoothButton.setText(on ? "Disable Bluetooth"
 				: "Enable Bluetooth");
 		mScanButton.setEnabled(on);
+
+        Log.i("update ui", "this stuff is here: scan start: " + mScanStarted + " scanning: " + mScanning);
+
 
 		// Scan
 		if (mScanStarted && mScanning) {
@@ -402,22 +433,54 @@ public class MainActivity extends Activity implements LeScanCallback {
 		return filename;
 	}
 
+    private ScanCallback mCallback = new ScanCallback() {
+            @Override
+            public void onScanFailed(int errorCode) {
+                Log.i("Callback", "Scan failed with error code: " + errorCode);
+            }
+
+            @Override
+            public void onScanResult(int callbackType, ScanResult result) {
+                Log.i("Callback", "Scan success!");
+
+                mBluetoothDevice = result.getDevice();
+                final int rssi = result.getRssi();
+                final ScanRecord scanRecord = result.getScanRecord();
+
+
+                MainActivity.this.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mDeviceInfoText.setText(BluetoothHelper.getDeviceInfoText(
+                                mBluetoothDevice, rssi, scanRecord.getBytes()));
+                        updateUi();
+                    }
+                });
+            }
+        };
+
+    /*
 	// Bluetooth callback method used to deliver LE scan results
-	@Override
-	public void onLeScan(BluetoothDevice device, final int rssi,
-			final byte[] scanRecord) {
-		mBluetoothAdapter.stopLeScan(this);
-		mBluetoothDevice = device;
+    private ScanCallback mLeScanCallback =
+            new ScanCallback() {
+                @Override
+                public void onLeScan(BluetoothDevice device, final int rssi,
+                                     final byte[] scanRecord) {
+                    mBluetoothAdapter.stopLeScan(this);
+                    mBluetoothDevice = device;
+                    Log.i("onLeScan", "we are here");
 
-		MainActivity.this.runOnUiThread(new Runnable() {
-			@Override
-			public void run() {
-				mDeviceInfoText.setText(BluetoothHelper.getDeviceInfoText(
-						mBluetoothDevice, rssi, scanRecord));
-				updateUi();
-			}
-		});
+                    MainActivity.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mDeviceInfoText.setText(BluetoothHelper.getDeviceInfoText(
+                                    mBluetoothDevice, rssi, scanRecord));
+                            updateUi();
+                        }
+                    });
 
-	}
+                }
+            };
+            */
 
 }
